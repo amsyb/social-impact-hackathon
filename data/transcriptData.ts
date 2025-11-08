@@ -1,7 +1,7 @@
 export interface Transcript {
   id: string;
   title: string;
-  status: 'In Progress' | 'Ongoing' | 'Completed';
+  status: 'In Progress' | 'Completed';
   lastUpdated: string;
   summary: string;
 }
@@ -16,15 +16,15 @@ export const transcripts: Transcript[] = [
   },
   {
     id: '2',
-    title: 'UX Research Session: Navigation Feedback',
-    status: 'Ongoing',
+    title: 'Emergency food vouchers',
+    status: 'Completed',
     lastUpdated: '2025-11-04',
     summary:
       'Participants provided feedback on the new navigation layout. Further interviews scheduled for next week.',
   },
   {
     id: '3',
-    title: 'Team Sync: Q4 Design Goals',
+    title: 'Emergency assistance',
     status: 'Completed',
     lastUpdated: '2025-11-01',
     summary:
@@ -32,15 +32,15 @@ export const transcripts: Transcript[] = [
   },
   {
     id: '4',
-    title: 'Client Call: Brand Refresh Discussion',
+    title: '30 day intensive residential program',
     status: 'In Progress',
     lastUpdated: '2025-11-05',
     summary: "Outlined visual direction and next steps for the client's new branding assets.",
   },
   {
     id: '5',
-    title: 'Engineering Review: API Integration',
-    status: 'Ongoing',
+    title: 'Emergency assistance prenatal',
+    status: 'In Progress',
     lastUpdated: '2025-11-03',
     summary: 'Investigated issues with endpoint authentication. Patch scheduled for next sprint.',
   },

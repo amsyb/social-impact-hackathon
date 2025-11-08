@@ -1,68 +1,66 @@
 import { useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import ConversationCard from '../../components/conversationCard';
 import FilterBar from '../../components/filterBar';
 import SearchBar from '../../components/searchBar';
 import { transcripts } from '../../data/transcriptData';
+import { styles } from '../../styles/transcriptStyles';
 
 interface Transcript {
   id: string;
   title: string;
-  status: 'In Progress' | 'Ongoing' | 'Completed';
+  status: 'In Progress' | 'Completed';
+  summary: string;
 }
 
 interface Filters {
-  status: 'All' | 'In Progress' | 'Ongoing';
+  status: 'All' | 'In Progress' | 'Completed';
 }
 
 export default function TranscriptPage() {
   const [selectedTranscript, setSelectedTranscript] = useState<Transcript | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [filters, setFilters] = useState<Filters>({
-    status: 'All',
-  });
+  const [filters, setFilters] = useState<Filters>({ status: 'All' });
 
   const filteredTranscripts = transcripts.filter(transcript => {
     const query = searchQuery.toLowerCase();
-
     const matchesSearch = searchQuery === '' || transcript.title.toLowerCase().includes(query);
-
     const matchesStatus = filters.status === 'All' || transcript.status === filters.status;
-
     return matchesSearch && matchesStatus;
   });
 
   return (
-    <div className="transcript-page">
-      <div className="transcript-page__header">
-        <div className="transcript-page__title">
-          <h1 className="transcript-page__heading">Transcripts</h1>
-        </div>
-
+    <View style={styles.page}>
+      <View>
         <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
-      </div>
+      </View>
 
       <FilterBar filters={filters} setFilters={setFilters} />
 
-      <div className="transcript-container">
+      <ScrollView contentContainerStyle={styles.container}>
         {filteredTranscripts.length > 0 ? (
           filteredTranscripts.map(transcript => (
             <ConversationCard
               key={transcript.id}
               transcript={transcript}
-              onClick={() => setSelectedTranscript(transcript)}
+              onPress={() => setSelectedTranscript(transcript)}
             />
           ))
         ) : (
-          <p className="no-results">No transcripts found. Try adjusting your search or filters!</p>
+          <Text style={styles.noResults}>
+            No transcripts found. Try adjusting your search or filters!
+          </Text>
         )}
-      </div>
+      </ScrollView>
 
       {selectedTranscript && (
-        <div className="overlay">
-          <h2>{selectedTranscript.title}</h2>
-          <button onClick={() => setSelectedTranscript(null)}>Close</button>
-        </div>
+        <View style={styles.overlay}>
+          <Text style={styles.overlayTitle}>{selectedTranscript.title}</Text>
+          <Pressable onPress={() => setSelectedTranscript(null)}>
+            <Text style={styles.closeButtonText}>Close</Text>
+          </Pressable>
+        </View>
       )}
-    </div>
+    </View>
   );
 }

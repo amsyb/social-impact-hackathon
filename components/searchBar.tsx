@@ -1,3 +1,6 @@
+import { Pressable, Text, TextInput, View } from 'react-native';
+import { styles } from '../styles/searchBarStyles';
+
 interface SearchBarProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
@@ -5,23 +8,20 @@ interface SearchBarProps {
 
 export default function SearchBar({ searchQuery, setSearchQuery }: SearchBarProps) {
   return (
-    <div className="search-bar">
-      <input
-        type="text"
-        className="search-bar__input"
+    <View style={styles.container}>
+      <TextInput
+        style={styles.input}
         placeholder="Search by title or participant..."
         value={searchQuery}
-        onChange={e => setSearchQuery(e.target.value)}
+        onChangeText={setSearchQuery}
+        clearButtonMode="never" // iOS: disable native clear button
       />
-      {searchQuery && (
-        <button
-          className="search-bar__clear"
-          onClick={() => setSearchQuery('')}
-          aria-label="Clear search"
-        >
-          ×
-        </button>
+
+      {searchQuery.length > 0 && (
+        <Pressable style={styles.clearButton} onPress={() => setSearchQuery('')}>
+          <Text style={styles.clearButtonText}>×</Text>
+        </Pressable>
       )}
-    </div>
+    </View>
   );
 }

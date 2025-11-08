@@ -1,35 +1,35 @@
+import { Pressable, Text, View } from 'react-native';
+import { styles } from '../styles/conversationCardStyles';
+
 interface ConversationCardProps {
   transcript: {
     id: string;
     title: string;
-    status: 'In Progress' | 'Ongoing' | 'Completed';
+    status: 'In Progress' | 'Completed';
     summary: string;
   };
-  onClick?: () => void;
+  onPress?: () => void;
 }
 
-export default function ConversationCard({ transcript, onClick }: ConversationCardProps) {
+export default function ConversationCard({ transcript, onPress }: ConversationCardProps) {
   const { title, status, summary } = transcript;
 
-  return (
-    <div className="conversation-card" onClick={onClick}>
-      <div className="conversation-card__header">
-        <h3 className="conversation-card__title">{title}</h3>
-        <span
-          className={`conversation-card__status ${
-            status === 'In Progress'
-              ? 'in-progress'
-              : status === 'Ongoing'
-                ? 'ongoing'
-                : 'completed'
-          }`}
-        >
-          {status}
-        </span>
-      </div>
+  // pick style based on status
+  const statusStyle = status === 'In Progress' ? styles.inProgress : styles.completed;
 
-      <p className="conversation-card__summary">{summary.slice(0, 100)}...</p>
-      <p className="conversation-card__summary-fade">{summary.slice(100, 200)}...</p>
-    </div>
+  const dotStyle = status === 'In Progress' ? styles.dotInProgress : styles.dotCompleted;
+
+  return (
+    <Pressable style={styles.card} onPress={onPress}>
+      <View style={styles.header}>
+        <Text style={styles.title}>{title}</Text>
+        <View style={[styles.statusContainer, statusStyle]}>
+          <View style={[styles.dot, dotStyle]} />
+          <Text style={styles.statusText}>{status}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.summary}>{summary.slice(0, 100)}...</Text>
+    </Pressable>
   );
 }

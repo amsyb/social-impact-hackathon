@@ -1,5 +1,8 @@
+import { Pressable, Text, View } from 'react-native';
+import { styles } from '../styles/filterBarStyles';
+
 interface Filters {
-  status: 'All' | 'In Progress' | 'Ongoing';
+  status: 'All' | 'In Progress' | 'Completed';
 }
 
 interface FilterBarProps {
@@ -8,7 +11,7 @@ interface FilterBarProps {
 }
 
 export default function FilterBar({ filters, setFilters }: FilterBarProps) {
-  const statuses: Filters['status'][] = ['All', 'In Progress', 'Ongoing'];
+  const statuses: Filters['status'][] = ['All', 'In Progress', 'Completed'];
 
   const handleStatusChange = (status: Filters['status']) => {
     setFilters({ status });
@@ -21,26 +24,26 @@ export default function FilterBar({ filters, setFilters }: FilterBarProps) {
   const hasActiveFilters = filters.status !== 'All';
 
   return (
-    <div className="filter-bar">
-      <div className="filter-bar__content">
-        <div className="filter-bar__buttons">
-          {statuses.map(status => (
-            <button
-              key={status}
-              className={`filter-bar__button ${filters.status === status ? 'active' : ''}`}
-              onClick={() => handleStatusChange(status)}
-            >
+    <View style={styles.container}>
+      <View style={styles.buttonRow}>
+        {statuses.map(status => (
+          <Pressable
+            key={status}
+            style={[styles.filterButton, filters.status === status && styles.activeButton]}
+            onPress={() => handleStatusChange(status)}
+          >
+            <Text style={[styles.filterText, filters.status === status && styles.activeText]}>
               {status}
-            </button>
-          ))}
-        </div>
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
-        {hasActiveFilters && (
-          <button className="filter-bar__clear" onClick={clearFilters}>
-            Clear Filter
-          </button>
-        )}
-      </div>
-    </div>
+      {hasActiveFilters && (
+        <Pressable style={styles.clearButton} onPress={clearFilters}>
+          <Text style={styles.clearButtonText}>Clear Filter</Text>
+        </Pressable>
+      )}
+    </View>
   );
 }
