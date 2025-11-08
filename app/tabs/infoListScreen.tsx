@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import InfoCard from '../../components/infoCard';
+import { useElevenLabsCall } from '../../hooks/useElevenLabsCall';
 import { styles } from '../../styles/infoCardStyles';
 
 export default function InfoListScreen() {
+  const { handleApiCall } = useElevenLabsCall();
+
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
 
   const handleToggle = (id: string, checked: boolean) => {
@@ -25,12 +28,9 @@ export default function InfoListScreen() {
       </ScrollView>
 
       <Pressable
-        style={[
-          styles.button,
-          selectedCards.length === 0 && { opacity: 0.5 }, // ✅ visual "disabled" effect
-        ]}
+        style={[styles.button, selectedCards.length === 0 && { opacity: 0.5 }]}
         disabled={selectedCards.length === 0}
-        onPress={() => console.log('Continue pressed')}
+        onPress={handleApiCall}
       >
         <Text style={styles.buttonText}>Have AI Call These Services</Text>
       </Pressable>
