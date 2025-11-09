@@ -4,6 +4,7 @@ import { SecureStoreWrapper } from '../utils/secureStoreWrapper';
 
 const SERVER_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://your-backend.example.com';
 const CONVERSATION_IDS_KEY = 'my_device_conversation_ids_v1';
+const CHAT_SESSION_KEY = 'chat_session_data_v1';
 
 type CallResponse = {
   success: boolean;
@@ -24,21 +25,38 @@ type TranscriptResponse = {
   };
 };
 
+type ChatSessionResponse = {
+  sessionId: string;
+  userId: string;
+};
+
+type ChatMessageResponse = {
+  reply: string;
+};
+
+type ChatSession = {
+  userId: string;
+  sessionId: string;
+  createdAt: number;
+};
+
 /**
  * Hook that manages server calls and local secure storage of conversation IDs for this device.
  */
 export function useServerApi() {
   const [conversationIds, setConversationIds] = useState<string[]>([]);
+  const [chatSession, setChatSession] = useState<ChatSession | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Load saved IDs from SecureStoreWrapper on mount
+  // Load saved IDs and chat session from SecureStoreWrapper on mount
   useEffect(() => {
     (async () => {
       await loadConversationIds();
+      await loadChatSession();
     })();
   }, []);
 
-  // SecureStoreWrapper helpers
+  // ==================== SecureStoreWrapper helpers ====================
   const loadConversationIds = useCallback(async () => {
     try {
       const raw = await SecureStoreWrapper.getItemAsync(CONVERSATION_IDS_KEY);
@@ -81,7 +99,37 @@ export function useServerApi() {
     [conversationIds, persistConversationIds],
   );
 
-  // Initiate a call (POST /call)
+  // ==================== Chat Session Storage ====================
+  const loadChatSession = useCallback(async () => {
+    try {
+      const raw = await SecureStoreWrapper.getItemAsync(CHAT_SESSION_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as ChatSession;
+        setChatSession(parsed);
+      } else {
+        setChatSession(null);
+      }
+    } catch (err) {
+      console.error('Failed to load chat session from SecureStoreWrapper', err);
+      setChatSession(null);
+    }
+  }, []);
+
+  const persistChatSession = useCallback(async (session: ChatSession | null) => {
+    try {
+      if (session) {
+        await SecureStoreWrapper.setItemAsync(CHAT_SESSION_KEY, JSON.stringify(session));
+      } else {
+        await SecureStoreWrapper.deleteItemAsync(CHAT_SESSION_KEY);
+      }
+      setChatSession(session);
+    } catch (err) {
+      console.error('Failed to save chat session to SecureStoreWrapper', err);
+    }
+  }, []);
+
+  // ==================== Call API (Voice) ====================
+
   const initiateCall = useCallback(
     async (phoneNumber: string): Promise<CallResponse> => {
       if (!phoneNumber) {
@@ -124,10 +172,8 @@ export function useServerApi() {
     [addConversationId],
   );
 
-  // Get transcript for a conversation ID (GET /conversation/:conversationId/transcript)
   const getTranscript = useCallback(async (conversationId: string): Promise<TranscriptResponse> => {
     if (!conversationId) throw new Error('conversationId is required');
-
     try {
       const res = await fetch(
         `${SERVER_URL}/conversation/${encodeURIComponent(conversationId)}/transcript`,
@@ -144,7 +190,6 @@ export function useServerApi() {
     }
   }, []);
 
-  // Optionally fetch server-side list (not used for UI listing; provided for completeness)
   const fetchAllConversationsFromServer = useCallback(async () => {
     try {
       const res = await fetch(`${SERVER_URL}/conversations`);
@@ -160,12 +205,10 @@ export function useServerApi() {
     }
   }, []);
 
-  // listConversations returns only local IDs for this device
   const listConversations = useCallback((): string[] => {
-    return conversationIds.slice(); // return copy
+    return conversationIds.slice();
   }, [conversationIds]);
 
-  // fetchSavedConversationDetails maps saved IDs -> transcript/metadata from server
   const fetchSavedConversationDetails = useCallback(async () => {
     const ids = conversationIds.slice();
     const result: Array<{
@@ -173,14 +216,12 @@ export function useServerApi() {
       transcript?: TranscriptResponse | null;
       error?: string;
     }> = [];
-
     await Promise.all(
       ids.map(async id => {
         try {
           const transcript = await getTranscript(id);
           result.push({ conversationId: id, transcript });
         } catch (err: any) {
-          // If fetch fails, push null but keep the ID local
           result.push({
             conversationId: id,
             transcript: null,
@@ -193,21 +234,127 @@ export function useServerApi() {
     return result;
   }, [conversationIds, getTranscript]);
 
-  // expose methods + state
+  // ==================== Chat API (Text) ====================
+  /**
+   * Create or retrieve a chat session for the current user
+   * If a session already exists locally, it will be reused
+   */
+  const createChatSession = useCallback(
+    async (userId?: string): Promise<ChatSessionResponse> => {
+      // If we already have a session, return it
+      if (chatSession) {
+        return {
+          sessionId: chatSession.sessionId,
+          userId: chatSession.userId,
+        };
+      }
+      setLoading(true);
+      try {
+        const res = await fetch(`${SERVER_URL}/chat/session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const errMsg = data?.error || `Server error: ${res.status}`;
+          if (Platform.OS === 'web') alert(errMsg);
+          else Alert.alert('Error', errMsg);
+          throw new Error(errMsg);
+        }
+        // Save session locally
+        const newSession: ChatSession = {
+          userId: data.userId,
+          sessionId: data.sessionId,
+          createdAt: Date.now(),
+        };
+        await persistChatSession(newSession);
+        return data as ChatSessionResponse;
+      } catch (err: any) {
+        console.error('createChatSession error', err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [chatSession, persistChatSession],
+  );
+
+  /**
+   * Send a message to the chat agent
+   * Automatically creates a session if one doesn't exist
+   */
+  const sendChatMessage = useCallback(
+    async (message: string): Promise<ChatMessageResponse> => {
+      if (!message || !message.trim()) {
+        throw new Error('Message cannot be empty');
+      }
+      // Ensure we have a session
+      let session = chatSession;
+      if (!session) {
+        const newSession = await createChatSession();
+        session = {
+          userId: newSession.userId,
+          sessionId: newSession.sessionId,
+          createdAt: Date.now(),
+        };
+      }
+      setLoading(true);
+      try {
+        const res = await fetch(`${SERVER_URL}/chat/message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: session.userId,
+            sessionId: session.sessionId,
+            message: message.trim(),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const errMsg = data?.error || `Server error: ${res.status}`;
+          if (Platform.OS === 'web') alert(errMsg);
+          else Alert.alert('Error', errMsg);
+          throw new Error(errMsg);
+        }
+        return data as ChatMessageResponse;
+      } catch (err: any) {
+        console.error('sendChatMessage error', err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [chatSession, createChatSession],
+  );
+
+  /**
+   * Clear the current chat session (start a new conversation)
+   */
+  const clearChatSession = useCallback(async () => {
+    await persistChatSession(null);
+  }, [persistChatSession]);
+
+  // ==================== Expose methods + state ====================
   return {
     // State
     conversationIds,
+    chatSession,
     loading,
-    // Storage operations
+    // Voice call storage operations
     loadConversationIds,
     listConversations,
     addConversationId,
     removeConversationId,
-    // Server operations
+    // Voice call server operations
     initiateCall,
     getTranscript,
     fetchAllConversationsFromServer,
-    // Convenience
     fetchSavedConversationDetails,
+    // Chat operations
+    createChatSession,
+    sendChatMessage,
+    clearChatSession,
+    loadChatSession,
   };
 }
