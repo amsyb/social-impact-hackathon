@@ -75,9 +75,7 @@ export function ChatComponent() {
       style={{ flex: 1 }} // fill the entire screen
     >
       <View style={styles.container}>
-        {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Chat Assistant</Text>
           {chatSession && (
             <Pressable style={styles.newChatButton} onPress={handleNewChat}>
               <Text style={styles.newChatButtonText}>New Chat</Text>
@@ -85,7 +83,6 @@ export function ChatComponent() {
           )}
         </View>
 
-        {/* Messages */}
         <ScrollView
           ref={scrollViewRef}
           style={styles.messagesContainer}
@@ -94,9 +91,6 @@ export function ChatComponent() {
           {messages.length === 0 && (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>Start a conversation</Text>
-              <Text style={styles.emptyStateSubtext}>
-                Ask me anything about homeless youth resources
-              </Text>
             </View>
           )}
 
@@ -132,7 +126,7 @@ export function ChatComponent() {
             style={styles.input}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Type your message..."
+            placeholder="Ask me anything about youth resources"
             placeholderTextColor="#999"
             multiline
             maxLength={500}

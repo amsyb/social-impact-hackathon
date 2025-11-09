@@ -1,29 +1,28 @@
-import { useRouter } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ScrollView, Text } from 'react-native';
 import { ChatComponent } from '../../components/aiChatComponent';
-import { useAuth } from '../../context/authContext';
+import { QuickLinks } from '../../components/quickLinks';
 import { styles } from '../../styles/mainScreenStyles';
+import { gradients } from '../../styles/theme';
 
 export default function MainScreen() {
-  const router = useRouter();
-  const { user, logout } = useAuth();
-  const handleLogout = async () => {
-    await logout();
-    router.replace('/login');
-  };
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome to Doorwai!</Text>
-      <Text style={styles.subtitle}>Hello, {user?.username}!</Text>
-      {/* Chat Component */}
-      <View style={styles.card}>
+    <LinearGradient
+      colors={gradients.primary.colors}
+      start={gradients.primary.start}
+      end={gradients.primary.end}
+      style={styles.container}
+    >
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.h1}>What's on your mind today, Jordan?</Text>
         <ChatComponent />
-      </View>
-      {/* Logout */}
-      <Pressable style={styles.cardButton} onPress={handleLogout}>
-        <Text style={styles.cardButtonText}>Logout</Text>
-      </Pressable>
-    </View>
+        <Text style={styles.h2}>Quick Actions</Text>
+        <QuickLinks />
+      </ScrollView>
+    </LinearGradient>
   );
 }

@@ -1,16 +1,18 @@
 export const colors = {
   //text
-  primaryText: '#2F2F2F',
+  primaryText: '#482424',
   secondaryText: '#fff',
   tertiaryText: '#8D8D8D',
   //buttons
   primaryButton: '#545497',
+  //orange
+  lightOrange: '#FDD2C2',
   //original bgs
   primaryBg: '#F3F3FD',
   secondaryBG: '#ffff',
   //shades
   white: '#fff',
-  offwhite: '#E4E4E4',
+  offwhite: '#fefefe',
   lightGrey: '#C9C9C9',
   darkGrey: '#8D8D8D',
   black: '#000',
