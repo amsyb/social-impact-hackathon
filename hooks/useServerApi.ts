@@ -90,6 +90,78 @@ export function useServerApi() {
     })();
   }, []);
 
+  // ==================== SecureStoreWrapper helpers ====================
+  const loadConversationIds = useCallback(async () => {
+    try {
+      const raw = await SecureStoreWrapper.getItemAsync(CONVERSATION_IDS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setConversationIds(parsed);
+        else setConversationIds([]);
+      } else {
+        setConversationIds([]);
+      }
+    } catch (err) {
+      console.error('Failed to load conversation ids from SecureStoreWrapper', err);
+      setConversationIds([]);
+    }
+  }, []);
+
+  const persistConversationIds = useCallback(async (ids: string[]) => {
+    try {
+      await SecureStoreWrapper.setItemAsync(CONVERSATION_IDS_KEY, JSON.stringify(ids));
+      setConversationIds(ids);
+    } catch (err) {
+      console.error('Failed to save conversation ids to SecureStoreWrapper', err);
+    }
+  }, []);
+
+  const addConversationId = useCallback(
+    async (id: string) => {
+      if (!id) return;
+      const next = Array.from(new Set([...conversationIds, id]));
+      await persistConversationIds(next);
+    },
+    [conversationIds, persistConversationIds],
+  );
+
+  const removeConversationId = useCallback(
+    async (id: string) => {
+      const filtered = conversationIds.filter(c => c !== id);
+      await persistConversationIds(filtered);
+    },
+    [conversationIds, persistConversationIds],
+  );
+
+  // ==================== Chat Session Storage ====================
+  const loadChatSession = useCallback(async () => {
+    try {
+      const raw = await SecureStoreWrapper.getItemAsync(CHAT_SESSION_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as ChatSession;
+        setChatSession(parsed);
+      } else {
+        setChatSession(null);
+      }
+    } catch (err) {
+      console.error('Failed to load chat session from SecureStoreWrapper', err);
+      setChatSession(null);
+    }
+  }, []);
+
+  const persistChatSession = useCallback(async (session: ChatSession | null) => {
+    try {
+      if (session) {
+        await SecureStoreWrapper.setItemAsync(CHAT_SESSION_KEY, JSON.stringify(session));
+      } else {
+        await SecureStoreWrapper.deleteItemAsync(CHAT_SESSION_KEY);
+      }
+      setChatSession(session);
+    } catch (err) {
+      console.error('Failed to save chat session to SecureStoreWrapper', err);
+    }
+  }, []);
+
   // ==================== Auth & Profile API ====================
 
   /**
@@ -200,119 +272,6 @@ export function useServerApi() {
     }
   }, []);
 
-  // ==================== SecureStoreWrapper helpers ====================
-  const loadConversationIds = useCallback(async () => {
-    try {
-      const raw = await SecureStoreWrapper.getItemAsync(CONVERSATION_IDS_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setConversationIds(parsed);
-        else setConversationIds([]);
-      } else {
-        setConversationIds([]);
-      }
-    } catch (err) {
-      console.error('Failed to load conversation ids from SecureStoreWrapper', err);
-      setConversationIds([]);
-    }
-  }, []);
-
-  const persistConversationIds = useCallback(async (ids: string[]) => {
-    try {
-      await SecureStoreWrapper.setItemAsync(CONVERSATION_IDS_KEY, JSON.stringify(ids));
-      setConversationIds(ids);
-    } catch (err) {
-      console.error('Failed to save conversation ids to SecureStoreWrapper', err);
-    }
-  }, []);
-
-  const addConversationId = useCallback(
-    async (id: string) => {
-      if (!id) return;
-      const next = Array.from(new Set([...conversationIds, id]));
-      await persistConversationIds(next);
-    },
-    [conversationIds, persistConversationIds],
-  );
-
-  const removeConversationId = useCallback(
-    async (id: string) => {
-      const filtered = conversationIds.filter(c => c !== id);
-      await persistConversationIds(filtered);
-    },
-    [conversationIds, persistConversationIds],
-  );
-
-  // ==================== Chat Session Storage ====================
-  const loadChatSession = useCallback(async () => {
-    try {
-      const raw = await SecureStoreWrapper.getItemAsync(CHAT_SESSION_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as ChatSession;
-        setChatSession(parsed);
-      } else {
-        setChatSession(null);
-      }
-    } catch (err) {
-      console.error('Failed to load chat session from SecureStoreWrapper', err);
-      setChatSession(null);
-    }
-  }, []);
-
-  const persistChatSession = useCallback(async (session: ChatSession | null) => {
-    try {
-      if (session) {
-        await SecureStoreWrapper.setItemAsync(CHAT_SESSION_KEY, JSON.stringify(session));
-      } else {
-        await SecureStoreWrapper.deleteItemAsync(CHAT_SESSION_KEY);
-      }
-      setChatSession(session);
-    } catch (err) {
-      console.error('Failed to save chat session to SecureStoreWrapper', err);
-    }
-  }, []);
-
-  // ==================== Call API (Voice) ====================
-
-  const initiateCall = useCallback(
-    async (phoneNumber: string): Promise<CallResponse> => {
-      if (!phoneNumber) {
-        const msg = 'Phone number is required';
-        if (Platform.OS === 'web') alert(msg);
-        else Alert.alert('Error', msg);
-        throw new Error(msg);
-      }
-
-      setLoading(true);
-      try {
-        const res = await fetch(`${SERVER_URL}/call`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phoneNumber }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const errMsg = data?.error || `Server error: ${res.status}`;
-          if (Platform.OS === 'web') alert(errMsg);
-          else Alert.alert('Error', errMsg);
-          throw new Error(errMsg);
-        }
-        // Save conversationId locally if server returns it
-        if (data?.conversationId) {
-          await addConversationId(data.conversationId);
-        }
-
-        return data as CallResponse;
-      } catch (err: any) {
-        console.error('initiateCall error', err);
-        throw err;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [addConversationId],
-  );
-
   const getTranscript = useCallback(async (conversationId: string): Promise<TranscriptResponse> => {
     if (!conversationId) throw new Error('conversationId is required');
     try {
@@ -346,6 +305,97 @@ export function useServerApi() {
     }
   }, []);
 
+  /**
+   * Fetch user's conversations from Firestore
+   */
+  const fetchUserConversations = useCallback(
+    async (userId: string) => {
+      if (!userId) {
+        throw new Error('userId is required');
+      }
+      setLoading(true);
+      try {
+        const res = await fetch(`${SERVER_URL}/conversations/user/${encodeURIComponent(userId)}`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const errMsg = data?.error || `Server error: ${res.status}`;
+          throw new Error(errMsg);
+        }
+        // Update local conversation IDs from server
+        const conversationIds = data.conversations?.map((c: any) => c.conversationId) || [];
+        await persistConversationIds(conversationIds);
+        return data;
+      } catch (err) {
+        console.error('fetchUserConversations error', err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [persistConversationIds],
+  );
+
+  /**
+   * Save a conversation from Firestore
+   */
+  const saveConversationToBackend = useCallback(async (conversationId: string, userId: string) => {
+    try {
+      const res = await fetch(`${SERVER_URL}/conversations/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId, userId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error('Failed to save conversation to backend:', data?.error);
+        // Don't throw - just log the error, conversation is saved locally
+      } else {
+        console.log('Conversation saved to backend:', conversationId);
+      }
+    } catch (err) {
+      console.error('Error saving conversation to backend:', err);
+    }
+  }, []);
+
+  /**
+   * Delete a conversation from Firestore
+   */
+  const deleteConversation = useCallback(
+    async (conversationId: string, userId?: string) => {
+      if (!conversationId) {
+        throw new Error('conversationId is required');
+      }
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `${SERVER_URL}/conversations/${encodeURIComponent(conversationId)}`,
+          {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId }),
+          },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const errMsg = data?.error || `Server error: ${res.status}`;
+          throw new Error(errMsg);
+        }
+        // Remove from local storage
+        await removeConversationId(conversationId);
+        return data;
+      } catch (err) {
+        console.error('deleteConversation error', err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [removeConversationId],
+  );
+
   const listConversations = useCallback((): string[] => {
     return conversationIds.slice();
   }, [conversationIds]);
@@ -374,6 +424,50 @@ export function useServerApi() {
 
     return result;
   }, [conversationIds, getTranscript]);
+
+  // ==================== Call API (Voice) ====================
+  const initiateCall = useCallback(
+    async (phoneNumber: string, userId?: string): Promise<CallResponse> => {
+      if (!phoneNumber) {
+        const msg = 'Phone number is required';
+        if (Platform.OS === 'web') alert(msg);
+        else Alert.alert('Error', msg);
+        throw new Error(msg);
+      }
+      setLoading(true);
+      try {
+        const res = await fetch(`${SERVER_URL}/call`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phoneNumber }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const errMsg = data?.error || `Server error: ${res.status}`;
+          if (Platform.OS === 'web') alert(errMsg);
+          else Alert.alert('Error', errMsg);
+          throw new Error(errMsg);
+        }
+        // Save conversationId locally
+        if (data?.conversationId) {
+          await addConversationId(data.conversationId);
+          // Save to backend with userId if available
+          const userIdToUse = userId || chatSession?.userId;
+          if (userIdToUse) {
+            await saveConversationToBackend(data.conversationId, userIdToUse);
+          }
+        }
+
+        return data as CallResponse;
+      } catch (err: any) {
+        console.error('initiateCall error', err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [addConversationId, chatSession?.userId, saveConversationToBackend],
+  );
 
   // ==================== Chat API (Text) ====================
   /**
@@ -496,6 +590,9 @@ export function useServerApi() {
     initiateCall,
     getTranscript,
     fetchAllConversationsFromServer,
+    fetchUserConversations,
+    saveConversationToBackend,
+    deleteConversation,
     fetchSavedConversationDetails,
     // Chat operations
     createChatSession,
