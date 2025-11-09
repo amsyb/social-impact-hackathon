@@ -1,18 +1,28 @@
 import { StyleSheet } from 'react-native';
+import { colors } from './theme';
 
 export const styles = StyleSheet.create({
   container: {
+    width: '70%',
+    alignSelf: 'center', // center it horizontally
+    backgroundColor: '#fbf4f3ff', //bg conversation
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    padding: 20,
+    borderRadius: 12,
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 3,
+    marginBottom: 80,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    backgroundColor: '#fbf4f3ff', //new chat header
+    // borderBottomWidth: 1, remove bottom line
+    // borderBottomColor: '#e0e0e0',
   },
   headerTitle: {
     fontSize: 18,
@@ -20,14 +30,13 @@ export const styles = StyleSheet.create({
     color: '#333',
   },
   newChatButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#007AFF',
-    borderRadius: 6,
+    padding: 10,
+    alignItems: 'center',
+    marginTop: 15,
   },
   newChatButtonText: {
-    color: '#fff',
-    fontSize: 14,
+    color: '#545497',
+    textDecorationLine: 'underline',
     fontWeight: '500',
   },
   messagesContainer: {
@@ -39,6 +48,7 @@ export const styles = StyleSheet.create({
   },
   emptyState: {
     flex: 1,
+    marginTop: 80,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
@@ -46,13 +56,14 @@ export const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: '#482424',
     marginBottom: 8,
   },
   emptyStateSubtext: {
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
+    marginTop: 8,
   },
   messageBubble: {
     maxWidth: '80%',
@@ -62,7 +73,7 @@ export const styles = StyleSheet.create({
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: '#007AFF',
+    backgroundColor: '#8E7081',
     borderBottomRightRadius: 4,
   },
   assistantBubble: {
@@ -85,16 +96,14 @@ export const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     padding: 12,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    backgroundColor: '#fbf4f3ff',
     gap: 8,
   },
   input: {
     flex: 1,
     minHeight: 40,
     maxHeight: 100,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.white, //input field
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -102,7 +111,7 @@ export const styles = StyleSheet.create({
     color: '#333',
   },
   sendButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#8E7081',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 20,

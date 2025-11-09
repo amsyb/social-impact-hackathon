@@ -3,16 +3,19 @@ import { colors } from './theme';
 
 export const styles = StyleSheet.create({
   page: {
-    backgroundColor: colors.primaryBg,
+    backgroundColor: '#fbf4f3ff', //card bg
     borderRadius: 12,
     padding: 16,
     marginHorizontal: 16,
     marginVertical: 8,
     shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 4, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 20,
     elevation: 3,
+    marginTop: 60,
+    marginLeft: 120, //padding
+    marginRight: 120,
   },
   container: {
     flexDirection: 'column',
@@ -45,14 +48,9 @@ export const styles = StyleSheet.create({
   },
   closeButtonText: {
     fontSize: 14,
-    color: colors.darkGrey,
+    color: '#cc2626ff',
     lineHeight: 20,
     marginBottom: 12,
-  },
-  header: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   closeButton: {
     color: '#fff',
