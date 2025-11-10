@@ -546,6 +546,11 @@ export function useServerApi() {
           }),
         });
         const data = await res.json().catch(() => ({}));
+        // Print just the error message (if it exists)
+        const errorMessage = data?.debug?.events?.[0]?.errorMessage;
+        if (errorMessage) {
+          console.log('Google AI error message:', errorMessage);
+        }
         if (!res.ok) {
           const errMsg = data?.error || `Server error: ${res.status}`;
           if (Platform.OS === 'web') alert(errMsg);
