@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
-const isWeb = typeof window !== 'undefined';
+const isWeb = Platform.OS === 'web';
 
 export const SecureStoreWrapper = {
   getItemAsync: async (key: string) => {

@@ -1,3 +1,4 @@
+import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -19,7 +20,7 @@ interface ProfileData {
   onboardingComplete?: boolean;
   createdAt?: number;
   updatedAt?: number;
-  [key: string]: any; // Allow any additional profile fields
+  [key: string]: any;
 }
 
 interface AuthContextType {
@@ -44,33 +45,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Import API functions from useServerApi
   const { addUser, updateProfile, getProfile } = useServerApi();
 
-  // Configure Google Auth (id token flow)
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId:
-      process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || 'YOUR_CLIENT_ID.apps.googleusercontent.com',
-    // TODO(PiyushDatta): Implement these later.
-    // iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    // androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+  const redirectUri = AuthSession.makeRedirectUri({
+    scheme: 'doorwai', // choose a scheme
   });
 
-  // Check auth status on mount
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    redirectUri,
+    scopes: ['profile', 'email'],
+  });
+
+  useEffect(() => {
+    console.log('=== GOOGLE AUTH DEBUG ===');
+    console.log('clientId:', process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID);
+    console.log('iosClientId:', process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID);
+    console.log('request:', request);
+    if (request) {
+      console.log('redirectUri:', request.redirectUri);
+    }
+    console.log('========================');
+  }, [request]);
+
   useEffect(() => {
     checkAuthStatus();
   }, []);
 
-  // Handle Google Auth response (when promptAsync finishes)
+  // Handle Google Auth response with access token
   useEffect(() => {
     (async () => {
+      console.log('Response type:', response?.type);
+
       if (response?.type === 'success') {
-        const { id_token } = response.params;
-        if (id_token) {
-          await handleGoogleIdToken(id_token);
+        const { authentication } = response;
+        console.log('Authentication:', authentication);
+
+        if (authentication?.accessToken) {
+          await handleGoogleAccessToken(authentication.accessToken);
         }
       } else if (response?.type === 'error') {
         console.error('Google auth error:', response.error);
+        console.error('Error params:', response.params);
         const msg = 'Google authentication failed. Please try again.';
         if (Platform.OS === 'web') alert(msg);
         else Alert.alert('Error', msg);
@@ -89,12 +107,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsAuthenticated(true);
         setUser(parsedUser);
 
-        // Load profile data from local storage
         if (storedProfileData) {
           setProfileData(JSON.parse(storedProfileData));
         }
 
-        // Fetch fresh profile data from server
         try {
           const freshProfile = await getProfile(parsedUser.uid);
           if (freshProfile) {
@@ -103,7 +119,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (error) {
           console.warn('Could not fetch fresh profile data:', error);
-          // Continue with cached data
         }
       }
     } catch (error) {
@@ -121,7 +136,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         else Alert.alert('Error', msg);
         return false;
       }
-      // Trigger Google OAuth flow (this opens the Google login)
       const result = await promptAsync();
       return result?.type === 'success';
     } catch (error) {
@@ -133,31 +147,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Handler that processes the Google ID token
-  const handleGoogleIdToken = async (idToken: string): Promise<boolean> => {
+  // Handler for access token - fetches user info from Google
+  const handleGoogleAccessToken = async (accessToken: string): Promise<boolean> => {
     try {
       setIsLoading(true);
-      // Decode the ID token to extract user information
-      // The ID token is a JWT with three parts separated by dots
-      const tokenParts = idToken.split('.');
-      if (tokenParts.length !== 3) {
-        throw new Error('Invalid ID token format');
+
+      // Fetch user info from Google using access token
+      const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!userInfoResponse.ok) {
+        throw new Error('Failed to fetch user info from Google');
       }
-      // Decode the payload (second part)
-      const payload = JSON.parse(atob(tokenParts[1]));
-      // Extract user profile from the token payload
+
+      const userInfo = await userInfoResponse.json();
+      console.log('User info from Google:', userInfo);
+
+      // Convert to UserProfile format
       const userProfile: UserProfile = {
-        uid: payload.sub, // Google user ID
-        email: payload.email,
-        name: payload.name,
-        photo: payload.picture,
+        uid: userInfo.id,
+        email: userInfo.email,
+        name: userInfo.name,
+        photo: userInfo.picture,
       };
+
       // Call backend to add/update user in database
       try {
         const result = await addUser(userProfile);
         console.log('User added to database:', result.isNewUser ? 'New user' : 'Existing user');
 
-        // Use the profile returned from the server (in case it was updated)
         const serverProfile: UserProfile = {
           uid: result.profile.uid,
           email: result.profile.email,
@@ -165,7 +184,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           photo: result.profile.photo,
         };
 
-        // Store profile data from server response
         if (result.profileData) {
           setProfileData(result.profileData);
           await SecureStoreWrapper.setItemAsync(
@@ -174,15 +192,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           );
         }
 
-        // Save token and user data locally
-        await SecureStoreWrapper.setItemAsync(AUTH_TOKEN_KEY, idToken);
+        await SecureStoreWrapper.setItemAsync(AUTH_TOKEN_KEY, accessToken);
         await SecureStoreWrapper.setItemAsync(USER_DATA_KEY, JSON.stringify(serverProfile));
         setIsAuthenticated(true);
         setUser(serverProfile);
       } catch (dbError) {
         console.error('Failed to add user to database:', dbError);
         // Continue with local auth even if database fails
-        await SecureStoreWrapper.setItemAsync(AUTH_TOKEN_KEY, idToken);
+        await SecureStoreWrapper.setItemAsync(AUTH_TOKEN_KEY, accessToken);
         await SecureStoreWrapper.setItemAsync(USER_DATA_KEY, JSON.stringify(userProfile));
         setIsAuthenticated(true);
         setUser(userProfile);
@@ -192,7 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       return true;
     } catch (error: any) {
-      console.error('Error handling Google idToken:', error);
+      console.error('Error handling Google access token:', error);
       const msg = error?.message || 'Authentication failed';
       if (Platform.OS === 'web') alert(msg);
       else Alert.alert('Error', msg);
@@ -207,11 +224,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('User must be authenticated to update profile');
     }
     try {
-      // Update profile on server
       const updatedProfile = await updateProfile(user.uid, data);
-      // Update local state
       setProfileData(updatedProfile);
-      // Update local storage
       await SecureStoreWrapper.setItemAsync(PROFILE_DATA_KEY, JSON.stringify(updatedProfile));
     } catch (error) {
       console.error('Error updating profile data:', error);
