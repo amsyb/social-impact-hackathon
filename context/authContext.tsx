@@ -1,252 +1,197 @@
-import { makeRedirectUri } from 'expo-auth-session';
-import * as Google from 'expo-auth-session/providers/google';
+import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, Platform } from 'react-native';
-import { useServerApi } from '../hooks/useServerApi';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { Alert, AppState } from 'react-native';
 import { SecureStoreWrapper } from '../utils/secureStoreWrapper';
-
-WebBrowser.maybeCompleteAuthSession();
-
-interface UserProfile {
-  uid: string;
-  email: string;
-  name: string;
-  photo?: string;
-}
-
-interface ProfileData {
-  userId: string;
-  onboardingComplete?: boolean;
-  createdAt?: number;
-  updatedAt?: number;
-  [key: string]: any;
-}
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  user: UserProfile | null;
-  profileData: ProfileData | null;
-  loginWithGoogle: () => Promise<boolean>;
-  logout: () => Promise<void>;
-  updateProfileData: (data: Partial<ProfileData>) => Promise<void>;
   isLoading: boolean;
+  user: any;
+  profileData: any;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | null>(null);
 
-const AUTH_TOKEN_KEY = 'doorwai_auth_token';
-const USER_DATA_KEY = 'doorwai_user_data';
-const PROFILE_DATA_KEY = 'doorwai_profile_data';
+const USER_KEY = 'auth_user';
+const PROFILE_KEY = 'auth_profile';
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [profileData, setProfileData] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const { addUser, updateProfile, getProfile } = useServerApi();
+  const router = useRouter();
+  const backendURL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
-  // Construct redirect URI based on platform
-  // For mobile in Expo Go, use Expo's auth proxy
-  // For web, use the app scheme
-  const redirectUri = Platform.select({
-    web: makeRedirectUri({
-      scheme: 'socialimpacthackathon',
-    }),
-    // Use Expo's auth proxy for mobile (works with Expo Go)
-    default: 'https://auth.expo.io/@asyb/social-impact-hackathon',
-  });
+  // Track whether user pressed login button (only then we poll)
+  const shouldPollRef = useRef(false);
 
-  // Log for debugging
-  // console.log('Google Auth Redirect URI:', redirectUri);
-  // console.log('Platform:', Platform.OS);
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-    // TODO(PiyushDatta): Uncomment these lines after verifying iOS and Android client IDs.
-    // iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    // androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-    scopes: ['profile', 'email'],
-    redirectUri: redirectUri,
-  });
-
+  // ------------------------------------------
+  // INITIAL LOAD
+  // ------------------------------------------
   useEffect(() => {
-    checkAuthStatus();
+    async function restoreSession() {
+      try {
+        const savedUser = await SecureStoreWrapper.getItemAsync(USER_KEY);
+        const savedProfile = await SecureStoreWrapper.getItemAsync(PROFILE_KEY);
+
+        if (savedUser && savedProfile) {
+          setUser(JSON.parse(savedUser));
+          setProfileData(JSON.parse(savedProfile));
+          setIsAuthenticated(true);
+        }
+      } catch (err) {
+        console.warn('Initial auth restore failed:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    restoreSession();
   }, []);
 
-  // Handle Google Auth response with access token
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const { authentication } = response;
-      if (authentication?.accessToken) {
-        handleGoogleAccessToken(authentication.accessToken);
-      }
-    } else if (response?.type === 'error') {
-      console.error('Google auth error:', response.error);
-      console.error('Error details:', JSON.stringify(response, null, 2));
-      const msg = `Google authentication failed: ${response.error?.message || 'Unknown error'}`;
-      if (Platform.OS === 'web') alert(msg);
-      else Alert.alert('Authentication Error', msg);
-    } else if (response?.type === 'cancel') {
-      console.log('User cancelled Google authentication');
-    }
-  }, [response]);
+  // ------------------------------------------
+  // POLLING AUTH RESULT (ONLY AFTER LOGIN)
+  // ------------------------------------------
+  async function pollForAuthSuccess() {
+    console.log('Starting polling for auth success...');
+    const maxAttempts = 20;
+    const delay = 1000;
 
-  const checkAuthStatus = async () => {
-    try {
-      const token = await SecureStoreWrapper.getItemAsync(AUTH_TOKEN_KEY);
-      const userData = await SecureStoreWrapper.getItemAsync(USER_DATA_KEY);
-      const storedProfileData = await SecureStoreWrapper.getItemAsync(PROFILE_DATA_KEY);
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const res = await fetch(`${backendURL}/auth/get-auth`);
+        const text = await res.text();
 
-      if (token && userData) {
-        const parsedUser = JSON.parse(userData);
-        setIsAuthenticated(true);
-        setUser(parsedUser);
-
-        if (storedProfileData) {
-          setProfileData(JSON.parse(storedProfileData));
-        }
-
+        let json = null;
         try {
-          const freshProfile = await getProfile(parsedUser.uid);
-          if (freshProfile) {
-            setProfileData(freshProfile);
-            await SecureStoreWrapper.setItemAsync(PROFILE_DATA_KEY, JSON.stringify(freshProfile));
-          }
-        } catch (error) {
-          console.warn('Could not fetch fresh profile data:', error);
+          json = JSON.parse(text);
+        } catch {
+          console.log('Response was not JSON');
         }
-      }
-    } catch (error) {
-      console.error('Error checking auth status:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  const loginWithGoogle = async (): Promise<boolean> => {
-    try {
-      if (!request) {
-        const msg = 'Google auth is not ready yet. Please try again.';
-        if (Platform.OS === 'web') alert(msg);
-        else Alert.alert('Error', msg);
-        return false;
-      }
-      const result = await promptAsync();
-      return result?.type === 'success';
-    } catch (error) {
-      const msg = 'Something went wrong during Google login';
-      if (Platform.OS === 'web') alert(msg);
-      else Alert.alert('Error', msg);
-      console.error('Google login error:', error);
-      return false;
-    }
-  };
+        if (json?.ready && json?.data?.user && json?.data?.profile) {
+          console.log('Auth detected!');
 
-  // Handler for access token - fetches user info from Google
-  const handleGoogleAccessToken = async (accessToken: string): Promise<boolean> => {
+          const userData = json.data.user;
+          const profileData = json.data.profile;
+
+          await SecureStoreWrapper.setItemAsync(USER_KEY, JSON.stringify(userData));
+          await SecureStoreWrapper.setItemAsync(PROFILE_KEY, JSON.stringify(profileData));
+
+          setUser(userData);
+          setProfileData(profileData);
+          setIsAuthenticated(true);
+
+          shouldPollRef.current = false;
+          router.replace('/tabs/mainScreen');
+          return true;
+        }
+      } catch (err) {
+        console.warn('Polling error:', err);
+      }
+
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    // Polling timeout ONLY if user initiated login
+    if (shouldPollRef.current) {
+      Alert.alert('Login Timeout', 'We could not detect your login. Try again.');
+      shouldPollRef.current = false;
+    }
+
+    return false;
+  }
+
+  // ------------------------------------------
+  // FOREGROUND RESUME (ONLY POLL IF LOGIN PRESSED)
+  // ------------------------------------------
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active' && shouldPollRef.current) {
+        console.log('App resumed → continue polling...');
+        pollForAuthSuccess();
+      }
+    });
+
+    return () => sub.remove();
+  }, []);
+
+  // ------------------------------------------
+  // LOGIN WITH GOOGLE
+  // ------------------------------------------
+  async function loginWithGoogle() {
     try {
       setIsLoading(true);
-      // Fetch user info from Google using access token
-      const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (!userInfoResponse.ok) {
-        throw new Error('Failed to fetch user info from Google');
-      }
-      const userInfo = await userInfoResponse.json();
-      // Convert to UserProfile format
-      const userProfile: UserProfile = {
-        uid: userInfo.id,
-        email: userInfo.email,
-        name: userInfo.name,
-        photo: userInfo.picture,
-      };
-      // Call backend to add/update user in database
-      try {
-        const result = await addUser(userProfile);
-        console.log('User added to database:', result.isNewUser ? 'New user' : 'Existing user');
+      shouldPollRef.current = true;
 
-        const serverProfile: UserProfile = {
-          uid: result.profile.uid,
-          email: result.profile.email,
-          name: result.profile.name,
-          photo: result.profile.photo,
+      const urlResponse = await fetch(`${backendURL}/auth/google/url`);
+      const { authUrl } = await urlResponse.json();
+
+      console.log('Opening Google OAuth...');
+      const result = await WebBrowser.openBrowserAsync(authUrl);
+      console.log('Browser closed or returned result:', result);
+
+      // MOBILE
+      if (result.type === 'dismiss') {
+        console.log('Detected popup close on mobile → starting poll');
+        await pollForAuthSuccess();
+        return;
+      }
+
+      // WEB
+      if (result.type === 'opened') {
+        console.log('Web detected → waiting for user to return to the tab...');
+
+        const handleFocus = () => {
+          console.log('User returned → starting poll');
+          window.removeEventListener('focus', handleFocus);
+          pollForAuthSuccess();
         };
 
-        if (result.profileData) {
-          setProfileData(result.profileData);
-          await SecureStoreWrapper.setItemAsync(
-            PROFILE_DATA_KEY,
-            JSON.stringify(result.profileData),
-          );
-        }
-
-        await SecureStoreWrapper.setItemAsync(AUTH_TOKEN_KEY, accessToken);
-        await SecureStoreWrapper.setItemAsync(USER_DATA_KEY, JSON.stringify(serverProfile));
-        setIsAuthenticated(true);
-        setUser(serverProfile);
-      } catch (dbError) {
-        console.error('Failed to add user to database:', dbError);
-        // Continue with local auth even if database fails
-        await SecureStoreWrapper.setItemAsync(AUTH_TOKEN_KEY, accessToken);
-        await SecureStoreWrapper.setItemAsync(USER_DATA_KEY, JSON.stringify(userProfile));
-        setIsAuthenticated(true);
-        setUser(userProfile);
-        const msg = 'Logged in, but failed to sync with server. Some features may be limited.';
-        if (Platform.OS === 'web') console.warn(msg);
-        else Alert.alert('Warning', msg);
+        window.addEventListener('focus', handleFocus);
+        return;
       }
-      return true;
-    } catch (error: any) {
-      console.error('Error handling Google access token:', error);
-      const msg = error?.message || 'Authentication failed';
-      if (Platform.OS === 'web') alert(msg);
-      else Alert.alert('Error', msg);
-      return false;
+      console.log('Unhandled WebBrowser result:', result);
+    } catch (err: any) {
+      console.error('Login error:', err);
+      Alert.alert('Login failed', err.message || 'Try again');
+      shouldPollRef.current = false;
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const updateProfileData = async (data: Partial<ProfileData>) => {
-    if (!user) {
-      throw new Error('User must be authenticated to update profile');
-    }
+  }
+  // ------------------------------------------
+  // LOGOUT
+  // ------------------------------------------
+  async function logout() {
     try {
-      const updatedProfile = await updateProfile(user.uid, data);
-      setProfileData(updatedProfile);
-      await SecureStoreWrapper.setItemAsync(PROFILE_DATA_KEY, JSON.stringify(updatedProfile));
-    } catch (error) {
-      console.error('Error updating profile data:', error);
-      throw error;
-    }
-  };
+      await SecureStoreWrapper.deleteItemAsync(USER_KEY);
+      await SecureStoreWrapper.deleteItemAsync(PROFILE_KEY);
 
-  const logout = async () => {
-    try {
-      await SecureStoreWrapper.deleteItemAsync(AUTH_TOKEN_KEY);
-      await SecureStoreWrapper.deleteItemAsync(USER_DATA_KEY);
-      await SecureStoreWrapper.deleteItemAsync(PROFILE_DATA_KEY);
-      setIsAuthenticated(false);
       setUser(null);
       setProfileData(null);
-    } catch (error) {
-      console.error('Logout error:', error);
+      setIsAuthenticated(false);
+
+      router.replace('/login');
+    } catch (err) {
+      console.error('Logout error:', err);
     }
-  };
+  }
 
   return (
     <AuthContext.Provider
       value={{
         isAuthenticated,
+        isLoading,
         user,
         profileData,
         loginWithGoogle,
         logout,
-        updateProfileData,
-        isLoading,
       }}
     >
       {children}
@@ -254,10 +199,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
-};
+}
